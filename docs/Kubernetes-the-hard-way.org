@@ -555,16 +555,16 @@ List the compute instances in your default compute zone:
 
 #+RESULTS:
 #+begin_example
-NAME             ZONE        MACHINE_TYPE   PREEMPTIBLE  INTERNAL_IP  EXTERNAL_IP    STATUS
-gg-controller-0  us-west2-c  n1-standard-4               10.240.0.10  34.94.56.188   RUNNING
-gg-controller-1  us-west2-c  n1-standard-4               10.240.0.11  34.94.182.163  RUNNING
-gg-controller-2  us-west2-c  n1-standard-4               10.240.0.12  35.235.77.77   RUNNING
-gg-worker-0      us-west2-c  n1-standard-8               10.240.0.20  35.236.1.139   RUNNING
-gg-worker-1      us-west2-c  n1-standard-8               10.240.0.21  35.236.93.211  RUNNING
-gg-worker-2      us-west2-c  n1-standard-8               10.240.0.22  34.94.175.154  RUNNING
-gg-worker-3      us-west2-c  n1-standard-8               10.240.0.23  34.94.206.98   RUNNING
-gg-worker-4      us-west2-c  n1-standard-8               10.240.0.24  35.236.113.11  RUNNING
-gg-worker-5      us-west2-c  n1-standard-8               10.240.0.25  34.94.241.86   RUNNING
+NAME             ZONE        MACHINE_TYPE   PREEMPTIBLE  INTERNAL_IP  EXTERNAL_IP  STATUS
+gg-controller-0  us-west2-c  n1-standard-4               10.240.0.10               RUNNING
+gg-controller-1  us-west2-c  n1-standard-4               10.240.0.11               RUNNING
+gg-controller-2  us-west2-c  n1-standard-4               10.240.0.12               RUNNING
+gg-worker-0      us-west2-c  n1-standard-8               10.240.0.20               RUNNING
+gg-worker-1      us-west2-c  n1-standard-8               10.240.0.21               RUNNING
+gg-worker-2      us-west2-c  n1-standard-8               10.240.0.22               RUNNING
+gg-worker-3      us-west2-c  n1-standard-8               10.240.0.23               RUNNING
+gg-worker-4      us-west2-c  n1-standard-8               10.240.0.24               RUNNING
+gg-worker-5      us-west2-c  n1-standard-8               10.240.0.25               RUNNING
 #+end_example
 
 
@@ -1055,20 +1055,20 @@ Generate the Kubernetes API Server certificate and private key:
 
 #+begin_src json :tangle cluster-setup/kubernetes-csr.json
   {
-    "CN": "kubernetes",
-    "key": {
-      "algo": "rsa",
-      "size": 2048
-    },
-    "names": [
-      {
-        "C": "US",
-        "L": "Portland",
-        "O": "Kubernetes",
-        "OU": "Kubernetes The Hard Way",
-        "ST": "Oregon"
-      }
-    ]
+	"CN": "kubernetes",
+	"key": {
+	  "algo": "rsa",
+	  "size": 2048
+	},
+	"names": [
+	  {
+		"C": "US",
+		"L": "Portland",
+		"O": "Kubernetes",
+		"OU": "Kubernetes The Hard Way",
+		"ST": "Oregon"
+	  }
+	]
   }
 #+end_src
 
@@ -1119,20 +1119,20 @@ Generate the =service-account= certificate and private key:
 
 #+begin_src json :tangle cluster-setup/service-account-csr.json
   {
-    "CN": "service-accounts",
-    "key": {
-      "algo": "rsa",
-      "size": 2048
-    },
-    "names": [
-      {
-        "C": "US",
-        "L": "Portland",
-        "O": "Kubernetes",
-        "OU": "Kubernetes The Hard Way",
-        "ST": "Oregon"
-      }
-    ]
+	"CN": "service-accounts",
+	"key": {
+	  "algo": "rsa",
+	  "size": 2048
+	},
+	"names": [
+	  {
+		"C": "US",
+		"L": "Portland",
+		"O": "Kubernetes",
+		"OU": "Kubernetes The Hard Way",
+		"ST": "Oregon"
+	  }
+	]
   }
 #+end_src
 
@@ -1559,6 +1559,19 @@ The commands in this lab must be run on each controller instance. Login to each 
   gcloud compute ssh gg-controller-0
 #+end_src
 
+#+RESULTS:
+| Welcome | to             | Ubuntu                          | 18.04.3    | LTS      | (GNU/Linux | 5.0.0-1029-gcp |     x86_64) |     |      |
+| *       | Documentation: | https://help.ubuntu.com         |            |          |            |                |             |     |      |
+| *       | Management:    | https://landscape.canonical.com |            |          |            |                |             |     |      |
+| *       | Support:       | https://ubuntu.com/advantage    |            |          |            |                |             |     |      |
+| System  | information    | as                              | of         | Thu      | Feb        | 6              |    03:23:17 | UTC | 2020 |
+| System  | load:          | 0.0                             | Processes: | 121      |            |                |             |     |      |
+| Usage   | of             | /:                              | 0.6%       | of       | 193.66GB   | Users          |      logged | in: |    0 |
+| Memory  | usage:         | 2%                              | IP         | address  | for        | ens4:          | 10.240.0.10 |     |      |
+| Swap    | usage:         | 0%                              |            |          |            |                |             |     |      |
+| 0       | packages       | can                             | be         | updated. |            |                |             |     |      |
+| 0       | updates        | are                             | security   | updates. |            |                |             |     |      |
+
 *** Running commands in parallel with tmux
     :PROPERTIES:
     :CUSTOM_ID: running-commands-in-parallel-with-tmux
@@ -1601,7 +1614,7 @@ host, and you can simply execute the commands in the rest of this lab in that se
   gcloud compute instances list --filter="tags.items=kubernetes-the-hard-way AND tags.items=controller" --format="csv(name)[no-heading]" > controller-nodes.txt
   gcloud compute instances list --filter="tags.items=kubernetes-the-hard-way AND tags.items=worker" --format="csv(name)[no-heading]" > worker-nodes.txt
   BASTION_HOST=$(head -1 controller-nodes.txt)
-  gcloud compute scp controller-nodes.txt ${BASTION_HOST}:~/
+  gcloud compute scp worker-nodes.txt controller-nodes.txt ${BASTION_HOST}:~/
   gcloud compute ssh --zone $(gcloud config get-value compute/zone) ${BASTION_HOST} 
 #+end_src
 
@@ -1631,10 +1644,10 @@ Last login: Sat Feb  1 01:44:39 2020 from 35.235.240.0
 **** test pdsh - must be logged into bastion host (previous step)
   #+begin_src sh :session k-sh :results output replace :tangle no
 	export PS1="BASTION HOST \u@\h \w $ "
-	for instance in `cat controller-nodes.txt` ; do
+	for instance in `cat worker-nodes.txt controller-nodes.txt` ; do
 		ssh -oStrictHostKeyChecking=no ${instance} id
 	done
-	WCOLL=controller-nodes.txt pdsh -R ssh echo "pdsh working on host $(hostname)"
+	WCOLL=controller-nodes.txt pdsh -R ssh echo 'pdsh working on host $(hostname)'
   #+end_src
 
   #+RESULTS:
@@ -1679,30 +1692,34 @@ Last login: Sat Feb  1 01:44:39 2020 from 35.235.240.0
 
 #+begin_src sh :session k-sh :results output replace :tangle cluster-setup/bin/40-bootstrap-etcd.sh
   WCOLL=controller-nodes.txt pdsh -R ssh \
-	  sudo mkdir -p /etc/etcd /var/lib/etcd
-	  sudo cp ca.pem kubernetes-key.pem kubernetes.pem /etc/etcd/
-#+end_src
-
-The instance internal IP address will be used to serve client requests and communicate
-with etcd cluster peers. 
-*** Retrieve the internal IP address for the current compute instance
-#+begin_src sh :session k-sh :results output replace :tangle cluster-setup/bin/40-bootstrap-etcd.sh
-  INTERNAL_IP=$(curl -s -H "Metadata-Flavor: Google" \
-	http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/ip)
+	  'sudo mkdir -p /etc/etcd /var/lib/etcd && \
+	  sudo cp -v ca.pem kubernetes-key.pem kubernetes.pem /etc/etcd/'
 #+end_src
 
 #+RESULTS:
+#+begin_example
 
-Each etcd member must have a unique name within an etcd cluster. 
-*** Set the etcd name to match the hostname of the current compute instance:
-#+begin_src sh :session k-sh :results output replace :tangle cluster-setup/bin/40-bootstrap-etcd.sh
-  ETCD_NAME=$(hostname -s)
-#+end_src
-
-#+RESULTS:
+> gg-controller-0: 'ca.pem' -> '/etc/etcd/ca.pem'
+'/etc/etcd/kubernetes-key.pem'
+'/etc/etcd/kubernetes.pem'
+'/etc/etcd/ca.pem'
+'/etc/etcd/kubernetes-key.pem'
+'/etc/etcd/kubernetes.pem'
+'/etc/etcd/ca.pem'
+'/etc/etcd/kubernetes-key.pem'
+'/etc/etcd/kubernetes.pem'
+#+end_example
 
 *** Create the =etcd.service= systemd unit file:
+The instance internal IP address will be used to serve client requests and communicate
+with etcd cluster peers. 
+
+Each etcd member must have a unique name within an etcd cluster. 
 #+begin_src sh :session k-sh :results output replace :tangle cluster-setup/bin/40-bootstrap-etcd.sh
+  WCOLL=controller-nodes.txt pdsh -R ssh '
+  INTERNAL_IP=$(curl -s -H "Metadata-Flavor: Google" \
+					 http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/ip)
+  ETCD_NAME=$(hostname -s)
   cat <<EOF | sudo tee /etc/systemd/system/etcd.service
   [Unit]
   Description=etcd
@@ -1734,6 +1751,7 @@ Each etcd member must have a unique name within an etcd cluster.
   [Install]
   WantedBy=multi-user.target
   EOF
+  '
 #+end_src
 
 #+RESULTS:
@@ -1775,9 +1793,11 @@ WantedBy=multi-user.target
     :CUSTOM_ID: start-the-etcd-server
     :END:
 #+begin_src sh :session k-sh :results output replace :tangle cluster-setup/bin/40-bootstrap-etcd.sh
+  WCOLL=controller-nodes.txt pdsh -R ssh '
   sudo systemctl daemon-reload
   sudo systemctl enable etcd
   sudo systemctl start etcd
+  '
 #+end_src
 
 #+RESULTS:
@@ -2340,14 +2360,12 @@ The commands in this lab must be run on each worker instance: =worker-0=, =worke
    :CUSTOM_ID: provisioning-a-kubernetes-worker-node
    :END:
 
-Install the OS dependencies:
+*** Install the OS dependencies:
 
-#+begin_src sh
-
-  {
-    sudo apt-get update
-    sudo apt-get -y install socat conntrack ipset
-  }
+#+begin_src sh :session k-sh :results output replace :tangle cluster-setup/bin/60-setup-workers.sh
+  WCOLL=worker-nodes.txt pdsh -R ssh '
+  sudo apt-get update
+  sudo apt-get -y install socat conntrack ipset'
 #+end_src
 
 #+begin_quote
@@ -2361,16 +2379,10 @@ Install the OS dependencies:
 
 By default the kubelet will fail to start if [[https://help.ubuntu.com/community/SwapFaq][swap]] is enabled. It is [[https://github.com/kubernetes/kubernetes/issues/7294][recommended]] that swap be disabled to ensure Kubernetes can provide proper resource allocation and quality of service.
 
-Verify if swap is enabled:
+*** disable swap immediately:
 
-#+begin_src sh
-  sudo swapon --show
-#+end_src
-
-If output is empthy then swap is not enabled. If swap is enabled run the following command to disable swap immediately:
-
-#+begin_src sh
-  sudo swapoff -a
+#+begin_src sh :session k-sh :results output replace :tangle cluster-setup/bin/60-setup-workers.sh
+  WCOLL=worker-nodes.txt pdsh -R ssh sudo swapoff -a
 #+end_src
 
 #+begin_quote
@@ -2382,43 +2394,44 @@ If output is empthy then swap is not enabled. If swap is enabled run the followi
     :CUSTOM_ID: download-and-install-worker-binaries
     :END:
 
-#+begin_src sh
+#+begin_src sh :session k-sh :results output replace :tangle cluster-setup/bin/60-setup-workers.sh
+  WCOLL=worker-nodes.txt pdsh -R ssh '
   wget -q --show-progress --https-only --timestamping \
-    https://github.com/kubernetes-sigs/cri-tools/releases/download/v1.15.0/crictl-v1.15.0-linux-amd64.tar.gz \
-    https://github.com/opencontainers/runc/releases/download/v1.0.0-rc8/runc.amd64 \
-    https://github.com/containernetworking/plugins/releases/download/v0.8.2/cni-plugins-linux-amd64-v0.8.2.tgz \
-    https://github.com/containerd/containerd/releases/download/v1.2.9/containerd-1.2.9.linux-amd64.tar.gz \
-    https://storage.googleapis.com/kubernetes-release/release/v1.15.3/bin/linux/amd64/kubectl \
-    https://storage.googleapis.com/kubernetes-release/release/v1.15.3/bin/linux/amd64/kube-proxy \
-    https://storage.googleapis.com/kubernetes-release/release/v1.15.3/bin/linux/amd64/kubelet
+	https://github.com/kubernetes-sigs/cri-tools/releases/download/v1.15.0/crictl-v1.15.0-linux-amd64.tar.gz \
+	https://github.com/opencontainers/runc/releases/download/v1.0.0-rc8/runc.amd64 \
+	https://github.com/containernetworking/plugins/releases/download/v0.8.2/cni-plugins-linux-amd64-v0.8.2.tgz \
+	https://github.com/containerd/containerd/releases/download/v1.2.9/containerd-1.2.9.linux-amd64.tar.gz \
+	https://storage.googleapis.com/kubernetes-release/release/v1.15.3/bin/linux/amd64/kubectl \
+	https://storage.googleapis.com/kubernetes-release/release/v1.15.3/bin/linux/amd64/kube-proxy \
+	https://storage.googleapis.com/kubernetes-release/release/v1.15.3/bin/linux/amd64/kubelet'
 #+end_src
 
 Create the installation directories:
 
-#+begin_src sh
+#+begin_src sh :session k-sh :results output replace :tangle cluster-setup/bin/60-setup-workers.sh
+  WCOLL=worker-nodes.txt pdsh -R ssh '
   sudo mkdir -p \
-    /etc/cni/net.d \
-    /opt/cni/bin \
-    /var/lib/kubelet \
-    /var/lib/kube-proxy \
-    /var/lib/kubernetes \
-    /var/run/kubernetes
+	/etc/cni/net.d \
+	/opt/cni/bin \
+	/var/lib/kubelet \
+	/var/lib/kube-proxy \
+	/var/lib/kubernetes \
+	/var/run/kubernetes'
 #+end_src
 
 Install the worker binaries:
 
-#+begin_src sh
-
-  {
-    mkdir containerd
-    tar -xvf crictl-v1.15.0-linux-amd64.tar.gz
-    tar -xvf containerd-1.2.9.linux-amd64.tar.gz -C containerd
-    sudo tar -xvf cni-plugins-linux-amd64-v0.8.2.tgz -C /opt/cni/bin/
-    sudo mv runc.amd64 runc
-    chmod +x crictl kubectl kube-proxy kubelet runc 
-    sudo mv crictl kubectl kube-proxy kubelet runc /usr/local/bin/
-    sudo mv containerd/bin/* /bin/
-  }
+#+begin_src sh :session k-sh :results output replace :tangle cluster-setup/bin/60-setup-workers.sh
+  WCOLL=worker-nodes.txt pdsh -R ssh '
+	mkdir containerd
+	tar -xvf crictl-v1.15.0-linux-amd64.tar.gz
+	tar -xvf containerd-1.2.9.linux-amd64.tar.gz -C containerd
+	sudo tar -xvf cni-plugins-linux-amd64-v0.8.2.tgz -C /opt/cni/bin/
+	sudo mv runc.amd64 runc
+	chmod +x crictl kubectl kube-proxy kubelet runc 
+	sudo mv crictl kubectl kube-proxy kubelet runc /usr/local/bin/
+	sudo mv containerd/bin/* /bin/
+  '
 #+end_src
 
 *** Configure CNI Networking
@@ -2426,45 +2439,205 @@ Install the worker binaries:
     :CUSTOM_ID: configure-cni-networking
     :END:
 
-Retrieve the Pod CIDR range for the current compute instance:
+Retrieve the Pod CIDR range for the current compute instance and create the =bridge= network configuration file:
 
-#+begin_src sh
+#+begin_src sh :session k-sh :results output replace :tangle cluster-setup/bin/60-setup-workers.sh
+  WCOLL=worker-nodes.txt pdsh -R ssh '
   POD_CIDR=$(curl -s -H "Metadata-Flavor: Google" \
-    http://metadata.google.internal/computeMetadata/v1/instance/attributes/pod-cidr)
-#+end_src
-
-Create the =bridge= network configuration file:
-
-#+begin_src sh
+				  http://metadata.google.internal/computeMetadata/v1/instance/attributes/pod-cidr)
   cat <<EOF | sudo tee /etc/cni/net.d/10-bridge.conf
   {
-      "cniVersion": "0.3.1",
-      "name": "bridge",
-      "type": "bridge",
-      "bridge": "cnio0",
-      "isGateway": true,
-      "ipMasq": true,
-      "ipam": {
-          "type": "host-local",
-          "ranges": [
-            [{"subnet": "${POD_CIDR}"}]
-          ],
-          "routes": [{"dst": "0.0.0.0/0"}]
-      }
+	  "cniVersion": "0.3.1",
+	  "name": "bridge",
+	  "type": "bridge",
+	  "bridge": "cnio0",
+	  "isGateway": true,
+	  "ipMasq": true,
+	  "ipam": {
+		  "type": "host-local",
+		  "ranges": [
+			[{"subnet": "${POD_CIDR}"}]
+		  ],
+		  "routes": [{"dst": "0.0.0.0/0"}]
+	  }
   }
-  EOF
+  EOF'
 #+end_src
+
+#+RESULTS:
+#+begin_example
+
+> 
+.bash_history                       admin.kubeconfig                    kube-scheduler.kubeconfig
+.bash_logout                        ca-key.pem                          kubernetes-key.pem
+.bashrc                             ca.pem                              kubernetes.pem
+.cache/                             controller-nodes.txt                service-account-key.pem
+.gnupg/                             encryption-config.yaml              service-account.pem
+.profile                            etcd-v3.4.0-linux-amd64/            worker-nodes.txt
+.ssh/                               etcd-v3.4.0-linux-amd64.tar.gz      
+.wget-hsts                          kube-controller-manager.kubeconfig  
+
+.bash_history                       admin.kubeconfig                    kube-scheduler.kubeconfig
+.bash_logout                        ca-key.pem                          kubernetes-key.pem
+.bashrc                             ca.pem                              kubernetes.pem
+.cache/                             controller-nodes.txt                service-account-key.pem
+.gnupg/                             encryption-config.yaml              service-account.pem
+.profile                            etcd-v3.4.0-linux-amd64/            worker-nodes.txt
+.ssh/                               etcd-v3.4.0-linux-amd64.tar.gz      
+.wget-hsts                          kube-controller-manager.kubeconfig  
+
+.bash_history                       admin.kubeconfig                    kube-scheduler.kubeconfig
+.bash_logout                        ca-key.pem                          kubernetes-key.pem
+.bashrc                             ca.pem                              kubernetes.pem
+.cache/                             controller-nodes.txt                service-account-key.pem
+.gnupg/                             encryption-config.yaml              service-account.pem
+.profile                            etcd-v3.4.0-linux-amd64/            worker-nodes.txt
+.ssh/                               etcd-v3.4.0-linux-amd64.tar.gz      
+.wget-hsts                          kube-controller-manager.kubeconfig
+> > > > > > > > > 
+.bash_history                       admin.kubeconfig                    kube-scheduler.kubeconfig
+.bash_logout                        ca-key.pem                          kubernetes-key.pem
+.bashrc                             ca.pem                              kubernetes.pem
+.cache/                             controller-nodes.txt                service-account-key.pem
+.gnupg/                             encryption-config.yaml              service-account.pem
+.profile                            etcd-v3.4.0-linux-amd64/            worker-nodes.txt
+.ssh/                               etcd-v3.4.0-linux-amd64.tar.gz      
+.wget-hsts                          kube-controller-manager.kubeconfig
+.bash_history                       admin.kubeconfig                    kube-scheduler.kubeconfig
+.bash_logout                        ca-key.pem                          kubernetes-key.pem
+.bashrc                             ca.pem                              kubernetes.pem
+.cache/                             controller-nodes.txt                service-account-key.pem
+.gnupg/                             encryption-config.yaml              service-account.pem
+.profile                            etcd-v3.4.0-linux-amd64/            worker-nodes.txt
+.ssh/                               etcd-v3.4.0-linux-amd64.tar.gz      
+.wget-hsts                          kube-controller-manager.kubeconfig
+.bash_history                       admin.kubeconfig                    kube-scheduler.kubeconfig
+.bash_logout                        ca-key.pem                          kubernetes-key.pem
+.bashrc                             ca.pem                              kubernetes.pem
+.cache/                             controller-nodes.txt                service-account-key.pem
+.gnupg/                             encryption-config.yaml              service-account.pem
+.profile                            etcd-v3.4.0-linux-amd64/            worker-nodes.txt
+.ssh/                               etcd-v3.4.0-linux-amd64.tar.gz      
+.wget-hsts                          kube-controller-manager.kubeconfig
+.bash_history                       admin.kubeconfig                    kube-scheduler.kubeconfig
+.bash_logout                        ca-key.pem                          kubernetes-key.pem
+.bashrc                             ca.pem                              kubernetes.pem
+.cache/                             controller-nodes.txt                service-account-key.pem
+.gnupg/                             encryption-config.yaml              service-account.pem
+.profile                            etcd-v3.4.0-linux-amd64/            worker-nodes.txt
+.ssh/                               etcd-v3.4.0-linux-amd64.tar.gz      
+.wget-hsts                          kube-controller-manager.kubeconfig
+.bash_history                       admin.kubeconfig                    kube-scheduler.kubeconfig
+.bash_logout                        ca-key.pem                          kubernetes-key.pem
+.bashrc                             ca.pem                              kubernetes.pem
+.cache/                             controller-nodes.txt                service-account-key.pem
+.gnupg/                             encryption-config.yaml              service-account.pem
+.profile                            etcd-v3.4.0-linux-amd64/            worker-nodes.txt
+.ssh/                               etcd-v3.4.0-linux-amd64.tar.gz      
+.wget-hsts                          kube-controller-manager.kubeconfig
+> > gg-worker-4: {
+gg-worker-4: "cniVersion": "0.3.1",
+gg-worker-4: "name": "bridge",
+gg-worker-4: "type": "bridge",
+gg-worker-4: "bridge": "cnio0",
+gg-worker-4: "isGateway": true,
+gg-worker-4: "ipMasq": true,
+gg-worker-4: "ipam": {
+gg-worker-4: "type": "host-local",
+gg-worker-4: "ranges": [
+gg-worker-4:   [{"subnet": "10.200.4.0/24"}]
+gg-worker-4: ],
+gg-worker-4: "routes": [{"dst": "0.0.0.0/0"}]
+gg-worker-4: }
+gg-worker-4: }
+gg-worker-3: {
+gg-worker-3: "cniVersion": "0.3.1",
+gg-worker-3: "name": "bridge",
+gg-worker-3: "type": "bridge",
+gg-worker-3: "bridge": "cnio0",
+gg-worker-3: "isGateway": true,
+gg-worker-3: "ipMasq": true,
+gg-worker-3: "ipam": {
+gg-worker-3: "type": "host-local",
+gg-worker-3: "ranges": [
+gg-worker-3:   [{"subnet": "10.200.3.0/24"}]
+gg-worker-3: ],
+gg-worker-3: "routes": [{"dst": "0.0.0.0/0"}]
+gg-worker-3: }
+gg-worker-3: }
+gg-worker-0: {
+gg-worker-0: "cniVersion": "0.3.1",
+gg-worker-0: "name": "bridge",
+gg-worker-0: "type": "bridge",
+gg-worker-0: "bridge": "cnio0",
+gg-worker-0: "isGateway": true,
+gg-worker-0: "ipMasq": true,
+gg-worker-0: "ipam": {
+gg-worker-0: "type": "host-local",
+gg-worker-0: "ranges": [
+gg-worker-0:   [{"subnet": "10.200.0.0/24"}]
+gg-worker-0: ],
+gg-worker-0: "routes": [{"dst": "0.0.0.0/0"}]
+gg-worker-0: }
+gg-worker-0: }
+gg-worker-5: {
+gg-worker-5: "cniVersion": "0.3.1",
+gg-worker-5: "name": "bridge",
+gg-worker-5: "type": "bridge",
+gg-worker-5: "bridge": "cnio0",
+gg-worker-5: "isGateway": true,
+gg-worker-5: "ipMasq": true,
+gg-worker-5: "ipam": {
+gg-worker-5: "type": "host-local",
+gg-worker-5: "ranges": [
+gg-worker-5:   [{"subnet": "10.200.5.0/24"}]
+gg-worker-5: ],
+gg-worker-5: "routes": [{"dst": "0.0.0.0/0"}]
+gg-worker-5: }
+gg-worker-5: }
+gg-worker-1: {
+gg-worker-1: "cniVersion": "0.3.1",
+gg-worker-1: "name": "bridge",
+gg-worker-1: "type": "bridge",
+gg-worker-1: "bridge": "cnio0",
+gg-worker-1: "isGateway": true,
+gg-worker-1: "ipMasq": true,
+gg-worker-1: "ipam": {
+gg-worker-1: "type": "host-local",
+gg-worker-1: "ranges": [
+gg-worker-1:   [{"subnet": "10.200.1.0/24"}]
+gg-worker-1: ],
+gg-worker-1: "routes": [{"dst": "0.0.0.0/0"}]
+gg-worker-1: }
+gg-worker-1: }
+gg-worker-2: {
+gg-worker-2: "cniVersion": "0.3.1",
+gg-worker-2: "name": "bridge",
+gg-worker-2: "type": "bridge",
+gg-worker-2: "bridge": "cnio0",
+gg-worker-2: "isGateway": true,
+gg-worker-2: "ipMasq": true,
+gg-worker-2: "ipam": {
+gg-worker-2: "type": "host-local",
+gg-worker-2: "ranges": [
+gg-worker-2:   [{"subnet": "10.200.2.0/24"}]
+gg-worker-2: ],
+gg-worker-2: "routes": [{"dst": "0.0.0.0/0"}]
+gg-worker-2: }
+gg-worker-2: }
+#+end_example
 
 Create the =loopback= network configuration file:
 
-#+begin_src sh
+#+begin_src sh :session k-sh :results output replace :tangle cluster-setup/bin/60-setup-workers.sh
+  WCOLL=worker-nodes.txt pdsh -R ssh '
   cat <<EOF | sudo tee /etc/cni/net.d/99-loopback.conf
   {
-      "cniVersion": "0.3.1",
-      "name": "lo",
-      "type": "loopback"
+	  "cniVersion": "0.3.1",
+	  "name": "lo",
+	  "type": "loopback"
   }
-  EOF
+  EOF'
 #+end_src
 
 *** Configure containerd
@@ -2474,25 +2647,27 @@ Create the =loopback= network configuration file:
 
 Create the =containerd= configuration file:
 
-#+begin_src sh
-  sudo mkdir -p /etc/containerd/
+#+begin_src sh :session k-sh :results output replace :tangle cluster-setup/bin/60-setup-workers.sh
+  WCOLL=worker-nodes.txt pdsh -R ssh sudo mkdir -p /etc/containerd/
 #+end_src
 
-#+begin_src sh
+#+begin_src sh :session k-sh :results output replace :tangle cluster-setup/bin/60-setup-workers.sh
+  WCOLL=worker-nodes.txt pdsh -R ssh '
   cat << EOF | sudo tee /etc/containerd/config.toml
   [plugins]
-    [plugins.cri.containerd]
-      snapshotter = "overlayfs"
-      [plugins.cri.containerd.default_runtime]
-        runtime_type = "io.containerd.runtime.v1.linux"
-        runtime_engine = "/usr/local/bin/runc"
-        runtime_root = ""
-  EOF
+	[plugins.cri.containerd]
+	  snapshotter = "overlayfs"
+	  [plugins.cri.containerd.default_runtime]
+		runtime_type = "io.containerd.runtime.v1.linux"
+		runtime_engine = "/usr/local/bin/runc"
+		runtime_root = ""
+  EOF'
 #+end_src
 
 Create the =containerd.service= systemd unit file:
 
-#+begin_src sh
+#+begin_src sh :session k-sh :results output replace :tangle cluster-setup/bin/60-setup-workers.sh
+  WCOLL=worker-nodes.txt pdsh -R ssh '
   cat <<EOF | sudo tee /etc/systemd/system/containerd.service
   [Unit]
   Description=containerd container runtime
@@ -2513,7 +2688,7 @@ Create the =containerd.service= systemd unit file:
 
   [Install]
   WantedBy=multi-user.target
-  EOF
+  EOF'
 #+end_src
 
 *** Configure the Kubelet
@@ -2521,39 +2696,42 @@ Create the =containerd.service= systemd unit file:
     :CUSTOM_ID: configure-the-kubelet
     :END:
 
-#+begin_src sh
-
-  {
-    sudo mv ${HOSTNAME}-key.pem ${HOSTNAME}.pem /var/lib/kubelet/
-    sudo mv ${HOSTNAME}.kubeconfig /var/lib/kubelet/kubeconfig
-    sudo mv ca.pem /var/lib/kubernetes/
-  }
+#+begin_src sh :session k-sh :results output replace :tangle cluster-setup/bin/60-setup-workers.sh
+  WCOLL=worker-nodes.txt pdsh -R ssh '
+	sudo mv -v ${HOSTNAME}-key.pem ${HOSTNAME}.pem /var/lib/kubelet/
+	sudo mv -v ${HOSTNAME}.kubeconfig /var/lib/kubelet/kubeconfig
+	sudo mv -v ca.pem /var/lib/kubernetes/
+  '
 #+end_src
 
 Create the =kubelet-config.yaml= configuration file:
 
-#+begin_src sh
+#+begin_src sh :session k-sh :results output replace :tangle cluster-setup/bin/60-setup-workers.sh
+  WCOLL=worker-nodes.txt pdsh -R ssh '
+  POD_CIDR=$(curl -s -H "Metadata-Flavor: Google" \
+  http://metadata.google.internal/computeMetadata/v1/instance/attributes/pod-cidr)
+
   cat <<EOF | sudo tee /var/lib/kubelet/kubelet-config.yaml
   kind: KubeletConfiguration
   apiVersion: kubelet.config.k8s.io/v1beta1
   authentication:
-    anonymous:
-      enabled: false
-    webhook:
-      enabled: true
-    x509:
-      clientCAFile: "/var/lib/kubernetes/ca.pem"
+	anonymous:
+	  enabled: false
+	webhook:
+	  enabled: true
+	x509:
+	  clientCAFile: "/var/lib/kubernetes/ca.pem"
   authorization:
-    mode: Webhook
+	mode: Webhook
   clusterDomain: "cluster.local"
   clusterDNS:
-    - "10.32.0.10"
+	- "10.32.0.10"
   podCIDR: "${POD_CIDR}"
   resolvConf: "/run/systemd/resolve/resolv.conf"
   runtimeRequestTimeout: "15m"
   tlsCertFile: "/var/lib/kubelet/${HOSTNAME}.pem"
   tlsPrivateKeyFile: "/var/lib/kubelet/${HOSTNAME}-key.pem"
-  EOF
+  EOF'
 #+end_src
 
 #+begin_quote
@@ -2562,7 +2740,8 @@ Create the =kubelet-config.yaml= configuration file:
 
 Create the =kubelet.service= systemd unit file:
 
-#+begin_src sh
+#+begin_src sh :session k-sh :results output replace :tangle cluster-setup/bin/60-setup-workers.sh
+  WCOLL=worker-nodes.txt pdsh -R ssh '
   cat <<EOF | sudo tee /etc/systemd/system/kubelet.service
   [Unit]
   Description=Kubernetes Kubelet
@@ -2572,20 +2751,20 @@ Create the =kubelet.service= systemd unit file:
 
   [Service]
   ExecStart=/usr/local/bin/kubelet \\
-    --config=/var/lib/kubelet/kubelet-config.yaml \\
-    --container-runtime=remote \\
-    --container-runtime-endpoint=unix:///var/run/containerd/containerd.sock \\
-    --image-pull-progress-deadline=2m \\
-    --kubeconfig=/var/lib/kubelet/kubeconfig \\
-    --network-plugin=cni \\
-    --register-node=true \\
-    --v=2
+	--config=/var/lib/kubelet/kubelet-config.yaml \\
+	--container-runtime=remote \\
+	--container-runtime-endpoint=unix:///var/run/containerd/containerd.sock \\
+	--image-pull-progress-deadline=2m \\
+	--kubeconfig=/var/lib/kubelet/kubeconfig \\
+	--network-plugin=cni \\
+	--register-node=true \\
+	--v=2
   Restart=on-failure
   RestartSec=5
 
   [Install]
   WantedBy=multi-user.target
-  EOF
+  EOF'
 #+end_src
 
 *** Configure the Kubernetes Proxy
@@ -2593,26 +2772,28 @@ Create the =kubelet.service= systemd unit file:
     :CUSTOM_ID: configure-the-kubernetes-proxy
     :END:
 
-#+begin_src sh
-  sudo mv kube-proxy.kubeconfig /var/lib/kube-proxy/kubeconfig
+#+begin_src sh :session k-sh :results output replace :tangle cluster-setup/bin/60-setup-workers.sh
+  WCOLL=worker-nodes.txt pdsh -R ssh sudo mv -v kube-proxy.kubeconfig /var/lib/kube-proxy/kubeconfig
 #+end_src
 
 Create the =kube-proxy-config.yaml= configuration file:
 
-#+begin_src sh
+#+begin_src sh :session k-sh :results output replace :tangle cluster-setup/bin/60-setup-workers.sh
+  WCOLL=worker-nodes.txt pdsh -R ssh '
   cat <<EOF | sudo tee /var/lib/kube-proxy/kube-proxy-config.yaml
   kind: KubeProxyConfiguration
   apiVersion: kubeproxy.config.k8s.io/v1alpha1
   clientConnection:
-    kubeconfig: "/var/lib/kube-proxy/kubeconfig"
+	kubeconfig: "/var/lib/kube-proxy/kubeconfig"
   mode: "iptables"
   clusterCIDR: "10.200.0.0/16"
-  EOF
+  EOF'
 #+end_src
 
 Create the =kube-proxy.service= systemd unit file:
 
-#+begin_src sh
+#+begin_src sh :session k-sh :results output replace :tangle cluster-setup/bin/60-setup-workers.sh
+  WCOLL=worker-nodes.txt pdsh -R ssh '
   cat <<EOF | sudo tee /etc/systemd/system/kube-proxy.service
   [Unit]
   Description=Kubernetes Kube Proxy
@@ -2620,13 +2801,13 @@ Create the =kube-proxy.service= systemd unit file:
 
   [Service]
   ExecStart=/usr/local/bin/kube-proxy \\
-    --config=/var/lib/kube-proxy/kube-proxy-config.yaml
+	--config=/var/lib/kube-proxy/kube-proxy-config.yaml
   Restart=on-failure
   RestartSec=5
 
   [Install]
   WantedBy=multi-user.target
-  EOF
+  EOF'
 #+end_src
 
 *** Start the Worker Services
@@ -2634,13 +2815,12 @@ Create the =kube-proxy.service= systemd unit file:
     :CUSTOM_ID: start-the-worker-services
     :END:
 
-#+begin_src sh
-
-  {
-    sudo systemctl daemon-reload
-    sudo systemctl enable containerd kubelet kube-proxy
-    sudo systemctl start containerd kubelet kube-proxy
-  }
+#+begin_src sh :session k-sh :results output replace :tangle cluster-setup/bin/60-setup-workers.sh
+  WCOLL=worker-nodes.txt pdsh -R ssh '
+	sudo systemctl daemon-reload
+	sudo systemctl enable containerd kubelet kube-proxy
+	sudo systemctl start containerd kubelet kube-proxy
+  '
 #+end_src
 
 #+begin_quote
