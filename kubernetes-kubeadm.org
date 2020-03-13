@@ -1,0 +1,727 @@
+# -*- indent-tabs-mode: nil; -*-
+#+options: ':nil *:t -:t ::t <:t H:3 \n:nil ^:nil arch:headline author:t broken-links:nil
+#+options: c:nil creator:nil d:(not "LOGBOOK") date:t e:t email:nil f:t inline:t num:t
+#+options: p:nil pri:nil prop:nil stat:t tags:t tasks:t tex:t timestamp:t title:t toc:t
+#+options: todo:t |:t
+#+title: Kubernetes using Kubeadm
+#+date: <2020-01-29 Wed>
+#+author: Gregory Grubbs
+#+email: gregory@dynapse.com
+#+language: en
+#+select_tags: export
+#+exclude_tags: noexport
+#+creator: Emacs 27.0.60 (Org mode 9.3.1)
+#+setupfile: https://raw.githubusercontent.com/fniessen/org-html-themes/master/setup/theme-readtheorg.setup
+#+PROPERTY: header-args:sh :comments org :shebang #!/usr/bin/env bash :tangle no
+* Source for this tutorial
+  [[https://medium.com/faun/configuring-ha-kubernetes-cluster-on-bare-metal-servers-with-kubeadm-1-2-1e79f0f7857b][Configuring HA Kubernetes cluster on bare metal servers with kubeadm]] (medium.com)
+  Author: [[https://medium.com/@ratibor78?source=post_page-----1e79f0f7857b----------------------][Alexey Nizhegolenko]]
+  
+* Clean up comments in generated scripts
+Org-mode includes the option to include comments in the generated code, but those comments
+include Org-mode properties, which is not useful in the shell script.  So we are going to
+clean those out prior to the shell scripts being written
+#+begin_src emacs-lisp :results none
+  (defun gjg/trim-property-shelf ()
+    "Get rid of all property shelf comments in org babel tangled code"
+    (progn
+      (replace-regexp "^#[[:space:]]*:PROPERTIES:[[:ascii:]]+?:END:$" "" nil (point-min) (point-max))
+      (save-buffer)))
+
+  (add-hook 'org-babel-post-tangle-hook #'gjg/trim-property-shelf)
+#+end_src
+* Prerequisites
+  :PROPERTIES:
+  :CUSTOM_ID: prerequisites
+  :END:
+
+** Google Cloud Platform
+   :PROPERTIES:
+   :CUSTOM_ID: google-cloud-platform
+   :END:
+
+This tutorial leverages the [[https://cloud.google.com/][Google Cloud Platform]] to streamline provisioning of the compute infrastructure required to bootstrap a Kubernetes cluster from the ground up. [[https://cloud.google.com/free/][Sign up]] for $300 in free credits.
+
+[[https://cloud.google.com/products/calculator/#id=55663256-c384-449c-9306-e39893e23afb][Estimated cost]] to run this tutorial: $0.23 per hour ($5.46 per day).
+
+#+begin_quote
+  The compute resources required for this tutorial exceed the Google Cloud Platform free tier.
+#+end_quote
+
+** Google Cloud Platform SDK
+   :PROPERTIES:
+   :CUSTOM_ID: google-cloud-platform-sdk
+   :END:
+
+*** Install the Google Cloud SDK
+    :PROPERTIES:
+    :CUSTOM_ID: install-the-google-cloud-sdk
+    :END:
+
+Follow the Google Cloud SDK [[https://cloud.google.com/sdk/][documentation]] to install and configure the =gcloud= command line utility.
+
+Verify the Google Cloud SDK version is 262.0.0 or higher:
+
+#+begin_src sh :session k-sh :results output replace
+  gcloud version
+#+end_src
+
+#+RESULTS:
+#+begin_example
+Google Cloud SDK 278.0.0
+alpha 2020.01.24
+beta 2020.01.24
+bq 2.0.52
+core 2020.01.24
+gsutil 4.47
+kubectl 2020.01.24
+
+
+To take a quick anonymous survey, run:
+gcloud survey
+#+end_example
+
+*** Set a Default Compute Region and Zone
+    :PROPERTIES:
+    :CUSTOM_ID: set-a-default-compute-region-and-zone
+    :END:
+
+This tutorial assumes a default compute region and zone have been configured.
+
+If you are using the =gcloud= command-line tool for the first time =init= is the easiest way to do this:
+
+#+begin_src sh :session k-sh :results none
+  gcloud init
+#+end_src
+
+Then be sure to authorize gcloud to access the Cloud Platform with your Google user credentials:
+
+#+begin_src sh :results none
+  gcloud auth login
+#+end_src
+
+Next set a default compute region and compute zone:
+
+#+begin_src sh :session k-sh :results none
+  gcloud config set compute/region us-west2
+#+end_src
+
+Set a default compute zone:
+
+#+begin_src sh :session k-sh :results none
+  gcloud config set compute/zone us-west2-c
+#+end_src
+
+#+begin_quote
+  Use the =gcloud compute zones list= command to view additional regions and zones.
+#+end_quote
+
+** Running Commands in Parallel with tmux
+   :PROPERTIES:
+   :CUSTOM_ID: running-commands-in-parallel-with-tmux
+   :END:
+
+[[https://github.com/tmux/tmux/wiki][tmux]] can be used to run commands on multiple compute instances at the same time. Labs in this tutorial may require running the same commands across multiple compute instances, in those cases consider using tmux and splitting a window into multiple panes with synchronize-panes enabled to speed up the provisioning process.
+
+#+begin_quote
+  The use of tmux is optional and not required to complete this tutorial.
+#+end_quote
+
+[[file:images/tmux-screenshot.png]]
+
+#+begin_quote
+  Enable synchronize-panes by pressing =ctrl+b= followed by =shift+:=. Next type =set synchronize-panes on= at the prompt. To disable synchronization: =set synchronize-panes off=.
+#+end_quote
+
+Next: [[file:02-client-tools.md][Installing the Client Tools]]
+
+
+** Running commands in parallel with =pdsh=
+=pdsh= is another way of running commands in parallel on multiple machines. If you want to
+use this, be sure to install =pdsh= in the environment 
+
+* Installing the Client Tools
+  :PROPERTIES:
+  :CUSTOM_ID: installing-the-client-tools
+  :END:
+
+In this lab you will install the command line utilities required to complete this tutorial: [[https://github.com/cloudflare/cfssl][cfssl]], [[https://github.com/cloudflare/cfssl][cfssljson]], and [[https://kubernetes.io/docs/tasks/tools/install-kubectl][kubectl]].
+
+** Install CFSSL
+   :PROPERTIES:
+   :CUSTOM_ID: install-cfssl
+   :END:
+
+The =cfssl= and =cfssljson= command line utilities will be used to provision a [[https://en.wikipedia.org/wiki/Public_key_infrastructure][PKI Infrastructure]] and generate TLS certificates.
+
+Download and install =cfssl= and =cfssljson=:
+
+*** OS X
+    :PROPERTIES:
+    :CUSTOM_ID: os-x
+    :ID:       9abe45b5-a227-4adc-b7e7-f962d81b2c03
+    :END:
+#+begin_src sh :session k-sh :results none :tangle cluster-setup/bin/00-client-tools-mac.sh
+  brew install cfssl
+#+end_src
+
+*** Linux
+    :PROPERTIES:
+    :CUSTOM_ID: linux
+    :END:
+
+#+begin_src sh :session k-sh :results none :tangle cluster-setup/bin/00-client-tools-linux.sh
+  wget -q --show-progress --https-only --timestamping \
+    https://storage.googleapis.com/kubernetes-the-hard-way/cfssl/linux/cfssl \
+    https://storage.googleapis.com/kubernetes-the-hard-way/cfssl/linux/cfssljson
+  chmod +x cfssl cfssljson
+  sudo mv cfssl cfssljson /usr/local/bin/
+#+end_src
+
+*** Verification
+    :PROPERTIES:
+    :CUSTOM_ID: verification
+    :END:
+
+Verify =cfssl= and =cfssljson= version 1.3.4 or higher is installed:
+
+#+begin_src sh :session k-sh :results output replace
+  cfssl version
+#+end_src
+
+#+RESULTS:
+: Version: 1.4.1
+: Runtime: go1.13.4
+
+#+begin_quote
+  output
+#+end_quote
+
+#+begin_example
+  Version: 1.3.4
+  Revision: dev
+  Runtime: go1.13
+#+end_example
+
+#+begin_src sh :session k-sh :results output replace
+  cfssljson --version
+#+end_src
+
+#+RESULTS:
+: Version: 1.4.1
+: Runtime: go1.13.4
+
+#+begin_example
+  Version: 1.3.4
+  Revision: dev
+  Runtime: go1.13
+#+end_example
+
+** Install kubectl
+   :PROPERTIES:
+   :CUSTOM_ID: install-kubectl
+   :END:
+
+The =kubectl= command line utility is used to interact with the Kubernetes API Server. Download and install =kubectl= from the official release binaries:
+
+*** OS X
+    :PROPERTIES:
+    :CUSTOM_ID: os-x-1
+    :END:
+
+#+begin_src sh :session k-sh :results none :tangle cluster-setup/bin/00-client-tools-mac.sh
+  curl -o kubectl https://storage.googleapis.com/kubernetes-release/release/v1.15.3/bin/darwin/amd64/kubectl
+  chmod +x kubectl
+  sudo mv kubectl /usr/local/bin/
+#+end_src
+
+*** Linux
+    :PROPERTIES:
+    :CUSTOM_ID: linux-1
+    :END:
+
+#+begin_src sh :session k-sh :results none :tangle cluster-setup/bin/00-client-tools-linux.sh
+  wget https://storage.googleapis.com/kubernetes-release/release/v1.15.3/bin/linux/amd64/kubectl
+  chmod +x kubectl
+  sudo mv kubectl /usr/local/bin/
+#+end_src
+
+*** Verification
+    :PROPERTIES:
+    :CUSTOM_ID: verification-1
+    :END:
+
+Verify =kubectl= version 1.15.3 or higher is installed:
+
+#+begin_src sh :session k-sh :results output replace
+  kubectl version --client --short
+#+end_src
+
+#+RESULTS:
+: Client Version: v1.16.2
+
+#+begin_quote
+  output
+#+end_quote
+
+#+begin_example
+  Client Version: v1.15.3
+#+end_example
+
+Next: [[file:03-compute-resources.md][Provisioning Compute Resources]]
+* Set up working environment
+** Set up shell for for demo
+#+begin_src emacs-lisp :keep-windows t :results none
+  (shell "k-sh")
+  (switch-to-buffer "Kubernetes-the-hard-way.org")
+  (let ((kthwdir default-directory))
+		(delete-other-windows  )
+		(switch-to-buffer-other-window "k-sh")
+		(process-send-string (current-buffer) (concat "cd " kthwdir "\n")))
+#+end_src
+
+** Create working directory
+Set up the working directory on this machine for creating certificates, resource manifests
+and so forth.  By default we will use a subdirectoy from this document path
+
+This working directory should be empty at the beginning of these labs.  If you want to
+specify your own path, set =WORKPATH= prior to executing the following code
+#+begin_src sh :session k-sh :results output replace
+  WORKPATH=`pwd`
+  mkdir -p $WORKPATH/cluster-setup/bin
+  cd $WORKPATH/cluster-setup
+  pwd
+#+end_src
+
+#+RESULTS:
+
+* Provisioning Compute Resources
+  :PROPERTIES:
+  :CUSTOM_ID: provisioning-compute-resources
+  :END:
+
+Kubernetes requires a set of machines to host the Kubernetes control plane and the worker nodes where containers are ultimately run. In this lab you will provision the compute resources required for running a secure and highly available Kubernetes cluster across a single [[https://cloud.google.com/compute/docs/regions-zones/regions-zones][compute zone]].
+
+#+begin_quote
+  Ensure a default compute zone and region have been set as described in the [[file:01-prerequisites.md#set-a-default-compute-region-and-zone][Prerequisites]] lab.
+#+end_quote
+#+begin_src sh :session k-sh :results output replace
+gcloud config list
+#+end_src
+
+#+RESULTS:
+: [compute]
+: region = us-west2
+: zone = us-west2-c
+: [core]
+: account = ggrubbs@mesosphere.io
+: disable_usage_reporting = True
+: project = konvoy-gcp-se
+: 
+: Your active configuration is: [default]
+
+
+** Networking
+   :PROPERTIES:
+   :CUSTOM_ID: networking
+   :END:
+
+The Kubernetes [[https://kubernetes.io/docs/concepts/cluster-administration/networking/#kubernetes-model][networking model]] assumes a flat network in which containers and nodes can communicate with each other. In cases where this is not desired [[https://kubernetes.io/docs/concepts/services-networking/network-policies/][network policies]] can limit how groups of containers are allowed to communicate with each other and external network endpoints.
+
+#+begin_quote
+  Setting up network policies is out of scope for this tutorial.
+#+end_quote
+
+*** Virtual Private Cloud Network
+    :PROPERTIES:
+    :CUSTOM_ID: virtual-private-cloud-network
+    :END:
+
+In this section a dedicated [[https://cloud.google.com/compute/docs/networks-and-firewalls#networks][Virtual Private Cloud]] (VPC) network will be setup to host the Kubernetes cluster.
+
+**** Create the =kubernetes-the-hard-way= custom VPC network:
+#+begin_src sh :session k-sh :results none :results none :tangle cluster-setup/bin/01-provision-gcp.sh :comments org
+  gcloud compute networks create kubernetes-the-hard-way --subnet-mode custom
+#+end_src
+
+
+A [[https://cloud.google.com/compute/docs/vpc/#vpc_networks_and_subnets][subnet]] must be provisioned with an IP address range large enough to assign a private IP address to each node in the Kubernetes cluster.
+
+**** Create the =kubernetes= subnet in the =kubernetes-the-hard-way= VPC network:
+#+begin_src sh :session k-sh :results none :tangle cluster-setup/bin/01-provision-gcp.sh
+  gcloud compute networks subnets create kubernetes \
+    --network kubernetes-the-hard-way \
+    --range 10.240.0.0/24
+#+end_src
+
+#+begin_quote
+  The =10.240.0.0/24= IP address range can host up to 254 compute instances.
+#+end_quote
+**** Create the Cloud NAT and Cloud Router for outbound internet access
+#+begin_src sh :session k-sh :results none :tangle cluster-setup/bin/01-provision-gcp.sh
+gcloud compute routers create kthw-router \
+    --network kubernetes-the-hard-way
+
+gcloud compute routers nats create kthw-nat \
+    --router=kthw-router \
+    --auto-allocate-nat-external-ips \
+    --nat-all-subnet-ip-ranges \
+    --enable-logging
+#+end_src 
+
+*** Firewall Rules
+    :PROPERTIES:
+    :CUSTOM_ID: firewall-rules
+    :END:
+
+**** Create a firewall rule that allows internal communication across all protocols:
+
+#+begin_src sh :session k-sh :results none :tangle cluster-setup/bin/01-provision-gcp.sh
+  gcloud compute firewall-rules create kubernetes-the-hard-way-allow-internal \
+    --allow tcp,udp,icmp \
+    --network kubernetes-the-hard-way \
+    --source-ranges 10.240.0.0/24,10.200.0.0/16
+#+end_src
+
+**** Create a firewall rule that allows external SSH, ICMP, and HTTPS:
+
+#+begin_src sh :session k-sh :results none :tangle cluster-setup/bin/01-provision-gcp.sh
+  gcloud compute firewall-rules create kubernetes-the-hard-way-allow-external \
+    --allow tcp:22,tcp:6443,icmp \
+    --network kubernetes-the-hard-way \
+    --source-ranges 0.0.0.0/0
+#+end_src
+
+#+begin_quote
+  An [[https://cloud.google.com/compute/docs/load-balancing/network/][external load balancer]] will be used to expose the Kubernetes API Servers to remote clients.
+#+end_quote
+
+List the firewall rules in the =kubernetes-the-hard-way= VPC network:
+
+#+begin_src sh :session k-sh :results output replace 
+  gcloud compute firewall-rules list --filter="network:kubernetes-the-hard-way"
+#+end_src
+
+#+RESULTS:
+: NAME                                    NETWORK                  DIRECTION  PRIORITY  ALLOW                 DENY  DISABLED
+: kubernetes-the-hard-way-allow-external  kubernetes-the-hard-way  INGRESS    1000      tcp:22,tcp:6443,icmp        False
+: kubernetes-the-hard-way-allow-internal  kubernetes-the-hard-way  INGRESS    1000      tcp,udp,icmp                False
+: 
+: To show all fields of the firewall, please show in JSON format: --format=json
+: To show all fields in table format, please see the examples in --help.
+NAME                                    NETWORK                  DIRECTION  PRIORITY  ALLOW                 DENY  DISABLED
+kubernetes-the-hard-way-allow-external  kubernetes-the-hard-way  INGRESS    1000      tcp:22,tcp:6443,icmp        False
+kubernetes-the-hard-way-allow-internal  kubernetes-the-hard-way  INGRESS    1000      tcp,udp,icmp                False
+
+To show all fields of the firewall, please show in JSON format: --format=json
+To show all fields in table format, please see the examples in --help.
+
+#+begin_quote
+  output
+#+end_quote
+
+#+begin_example
+  NAME                                    NETWORK                  DIRECTION  PRIORITY  ALLOW                 DENY
+  kubernetes-the-hard-way-allow-external  kubernetes-the-hard-way  INGRESS    1000      tcp:22,tcp:6443,icmp
+  kubernetes-the-hard-way-allow-internal  kubernetes-the-hard-way  INGRESS    1000      tcp,udp,icmp
+#+end_example
+
+*** Kubernetes Public IP Address
+    :PROPERTIES:
+    :CUSTOM_ID: kubernetes-public-ip-address
+    :END:
+
+**** Allocate a static IP address that will be attached to the external load balancer fronting the Kubernetes API Servers:
+
+#+begin_src sh :session k-sh :results none :tangle cluster-setup/bin/01-provision-gcp.sh
+  gcloud compute addresses create kubernetes-the-hard-way \
+    --region $(gcloud config get-value compute/region)
+#+end_src
+
+Verify the =kubernetes-the-hard-way= static IP address was created in your default compute region:
+
+#+begin_src sh :session k-sh :results output replace
+  gcloud compute addresses list --filter="name=('kubernetes-the-hard-way')"
+#+end_src
+
+#+RESULTS:
+: NAME                     ADDRESS/RANGE  TYPE      PURPOSE  NETWORK  REGION    SUBNET  STATUS
+: kubernetes-the-hard-way  34.94.97.101   EXTERNAL                    us-west2          RESERVED
+
+#+begin_quote
+  output
+#+end_quote
+
+#+begin_example
+  NAME                     REGION    ADDRESS        STATUS
+  kubernetes-the-hard-way  us-west1  XX.XXX.XXX.XX  RESERVED
+#+end_example
+
+** Compute Instances
+   :PROPERTIES:
+   :CUSTOM_ID: compute-instances
+   :END:
+
+The compute instances in this lab will be provisioned using [[https://www.ubuntu.com/server][Ubuntu Server]] 18.04, which has good support for the [[https://github.com/containerd/containerd][containerd container runtime]]. Each compute instance will be provisioned with a fixed private IP address to simplify the Kubernetes bootstrapping process.
+
+*** Kubernetes Controllers
+    :PROPERTIES:
+    :CUSTOM_ID: kubernetes-controllers
+    :END:
+
+**** Create three compute instances which will host the Kubernetes control plane:
+#+begin_src sh :session k-sh :results none :tangle cluster-setup/bin/01-provision-gcp.sh
+CONTROL_INSTANCE_TYPE=n1-standard-4
+  for i in 0 1; do
+    gcloud compute instances create gg-controller-${i} \
+      --async \
+	  --no-address \
+      --boot-disk-size 200GB \
+      --can-ip-forward \
+      --image-family ubuntu-1804-lts \
+      --image-project ubuntu-os-cloud \
+      --machine-type ${CONTROL_INSTANCE_TYPE} \
+      --private-network-ip 10.240.0.1${i} \
+      --scopes compute-rw,storage-ro,service-management,service-control,logging-write,monitoring \
+      --subnet kubernetes \
+      --tags kubernetes-the-hard-way,controller \
+	  --labels owner=ggrubbs,expiration=48h
+  done
+#+end_src
+
+List the create controller instances
+#+begin_src sh :session k-sh :results table replace
+gcloud compute instances list --filter="tags.items=kubernetes-the-hard-way AND tags.items=controller"
+#+end_src
+
+#+RESULTS:
+| NAME            | ZONE       | MACHINE_TYPE  | PREEMPTIBLE |   INTERNAL_IP | EXTERNAL_IP | STATUS |
+| gg-controller-0 | us-west2-c | n1-standard-4 | 10.240.0.10 |  34.94.56.188 | RUNNING     |        |
+| gg-controller-1 | us-west2-c | n1-standard-4 | 10.240.0.11 | 34.94.182.163 | RUNNING     |        |
+| gg-controller-2 | us-west2-c | n1-standard-4 | 10.240.0.12 |  35.235.77.77 | RUNNING     |        |
+
+*** Kubernetes Workers
+    :PROPERTIES:
+    :CUSTOM_ID: kubernetes-workers
+    :END:
+
+Each worker instance requires a pod subnet allocation from the Kubernetes cluster CIDR range. The pod subnet allocation will be used to configure container networking in a later exercise. The =pod-cidr= instance metadata will be used to expose pod subnet allocations to compute instances at runtime.
+
+#+begin_quote
+  The Kubernetes cluster CIDR range is defined by the Controller Manager's =--cluster-cidr= flag. In this tutorial the cluster CIDR range will be set to =10.200.0.0/16=, which supports 254 subnets.
+#+end_quote
+
+**** Create ${NUM_WORKERS} compute instances which will host the Kubernetes worker nodes:
+#+begin_src sh :session k-sh :results none :tangle cluster-setup/bin/01-provision-gcp.sh
+  WORKER_INSTANCE_TYPE=n1-standard-8
+  NUM_WORKERS=3
+	for i in $(seq 0 $((${NUM_WORKERS} - 1))) ; do
+	# for i in 0 1 2; do
+	  gcloud compute instances create gg-worker-${i} \
+		--async \
+		--no-address \
+		--boot-disk-size 200GB \
+		--can-ip-forward \
+		--image-family ubuntu-1804-lts \
+		--image-project ubuntu-os-cloud \
+		--machine-type ${WORKER_INSTANCE_TYPE} \
+		--metadata pod-cidr=10.200.${i}.0/24 \
+		--private-network-ip 10.240.0.2${i} \
+		--scopes compute-rw,storage-ro,service-management,service-control,logging-write,monitoring \
+		--subnet kubernetes \
+		--tags kubernetes-the-hard-way,worker \
+		--labels owner=ggrubbs,expiration=48h
+	done
+#+end_src
+
+#+RESULTS:
+#+begin_example
+
+▶  ~ ❯ projects ❯ … ❯ docs ▶  gregoryg ▶ $ ▶ > > > > > > > > > > > > > > NOTE: The users will be charged for public IPs when VMs are created.
+Instance creation in progress for [gg-worker-0]: https://www.googleapis.com/compute/v1/projects/konvoy-gcp-se/zones/us-west2-c/operations/operation-1580347403479-59d514d9b2b14-47b5eb0d-04d928f3
+Use [gcloud compute operations describe URI] command to check the status of the operation(s).
+NOTE: The users will be charged for public IPs when VMs are created.
+Instance creation in progress for [gg-worker-1]: https://www.googleapis.com/compute/v1/projects/konvoy-gcp-se/zones/us-west2-c/operations/operation-1580347406920-59d514dcfac59-892dfeed-90ace76a
+Use [gcloud compute operations describe URI] command to check the status of the operation(s).
+NOTE: The users will be charged for public IPs when VMs are created.
+Instance creation in progress for [gg-worker-2]: https://www.googleapis.com/compute/v1/projects/konvoy-gcp-se/zones/us-west2-c/operations/operation-1580347410170-59d514e014220-3c02d392-56469a79
+Use [gcloud compute operations describe URI] command to check the status of the operation(s).
+#+end_example
+
+List the created worker instances
+#+begin_src sh :session k-sh :results table replace
+gcloud compute instances list --filter="tags.items=kubernetes-the-hard-way AND tags.items=worker"
+#+end_src
+
+#+RESULTS:
+| NAME        | ZONE       | MACHINE_TYPE  | PREEMPTIBLE |   INTERNAL_IP | EXTERNAL_IP | STATUS |
+| gg-worker-0 | us-west2-c | n1-standard-8 | 10.240.0.20 |  35.236.1.139 | RUNNING     |        |
+| gg-worker-1 | us-west2-c | n1-standard-8 | 10.240.0.21 | 35.236.93.211 | RUNNING     |        |
+| gg-worker-2 | us-west2-c | n1-standard-8 | 10.240.0.22 | 34.94.175.154 | RUNNING     |        |
+| gg-worker-3 | us-west2-c | n1-standard-8 | 10.240.0.23 |  34.94.206.98 | RUNNING     |        |
+| gg-worker-4 | us-west2-c | n1-standard-8 | 10.240.0.24 | 35.236.113.11 | RUNNING     |        |
+| gg-worker-5 | us-west2-c | n1-standard-8 | 10.240.0.25 |  34.94.241.86 | RUNNING     |        |
+
+*** ETCD Cluster Instances
+    :PROPERTIES:
+    :CUSTOM_ID: kubernetes-workers
+    :END:
+
+Each worker instance requires a pod subnet allocation from the Kubernetes cluster CIDR range. The pod subnet allocation will be used to configure container networking in a later exercise. The =pod-cidr= instance metadata will be used to expose pod subnet allocations to compute instances at runtime.
+
+#+begin_quote
+  The Kubernetes cluster CIDR range is defined by the Controller Manager's =--cluster-cidr= flag. In this tutorial the cluster CIDR range will be set to =10.200.0.0/16=, which supports 254 subnets.
+#+end_quote
+
+**** Create ${NUM_ETCD} compute instances which will host the Kubernetes etcd nodes:
+#+begin_src sh :session k-sh :results none :tangle cluster-setup/bin/01-provision-gcp.sh
+  ETCD_INSTANCE_TYPE=n1-standard-8
+  NUM_ETCD=3
+	for i in $(seq 0 $((${NUM_ETCD} - 1))) ; do
+	# for i in 0 1 2; do
+	  gcloud compute instances create gg-etcd-${i} \
+		--async \
+		--no-address \
+		--boot-disk-size 200GB \
+		--can-ip-forward \
+		--image-family ubuntu-1804-lts \
+		--image-project ubuntu-os-cloud \
+		--machine-type ${ETCD_INSTANCE_TYPE} \
+		--metadata pod-cidr=10.200.${i}.0/24 \
+		--private-network-ip 10.240.0.3${i} \
+		--scopes compute-rw,storage-ro,service-management,service-control,logging-write,monitoring \
+		--subnet kubernetes \
+		--tags kubernetes-the-hard-way,etcd \
+		--labels owner=ggrubbs,expiration=48h
+	done
+#+end_src
+
+#+RESULTS:
+#+begin_example
+
+▶  ~ ❯ projects ❯ … ❯ docs ▶  gregoryg ▶ $ ▶ > > > > > > > > > > > > > > NOTE: The users will be charged for public IPs when VMs are created.
+Instance creation in progress for [gg-worker-0]: https://www.googleapis.com/compute/v1/projects/konvoy-gcp-se/zones/us-west2-c/operations/operation-1580347403479-59d514d9b2b14-47b5eb0d-04d928f3
+Use [gcloud compute operations describe URI] command to check the status of the operation(s).
+NOTE: The users will be charged for public IPs when VMs are created.
+Instance creation in progress for [gg-worker-1]: https://www.googleapis.com/compute/v1/projects/konvoy-gcp-se/zones/us-west2-c/operations/operation-1580347406920-59d514dcfac59-892dfeed-90ace76a
+Use [gcloud compute operations describe URI] command to check the status of the operation(s).
+NOTE: The users will be charged for public IPs when VMs are created.
+Instance creation in progress for [gg-worker-2]: https://www.googleapis.com/compute/v1/projects/konvoy-gcp-se/zones/us-west2-c/operations/operation-1580347410170-59d514e014220-3c02d392-56469a79
+Use [gcloud compute operations describe URI] command to check the status of the operation(s).
+#+end_example
+
+List the created worker instances
+#+begin_src sh :session k-sh :results table replace
+gcloud compute instances list --filter="tags.items=kubernetes-the-hard-way AND tags.items=worker"
+#+end_src
+
+#+RESULTS:
+| NAME        | ZONE       | MACHINE_TYPE  | PREEMPTIBLE |   INTERNAL_IP | EXTERNAL_IP | STATUS |
+| gg-worker-0 | us-west2-c | n1-standard-8 | 10.240.0.20 |  35.236.1.139 | RUNNING     |        |
+| gg-worker-1 | us-west2-c | n1-standard-8 | 10.240.0.21 | 35.236.93.211 | RUNNING     |        |
+| gg-worker-2 | us-west2-c | n1-standard-8 | 10.240.0.22 | 34.94.175.154 | RUNNING     |        |
+| gg-worker-3 | us-west2-c | n1-standard-8 | 10.240.0.23 |  34.94.206.98 | RUNNING     |        |
+| gg-worker-4 | us-west2-c | n1-standard-8 | 10.240.0.24 | 35.236.113.11 | RUNNING     |        |
+| gg-worker-5 | us-west2-c | n1-standard-8 | 10.240.0.25 |  34.94.241.86 | RUNNING     |        |
+*** Verification
+    :PROPERTIES:
+    :CUSTOM_ID: verification
+    :END:
+
+List the compute instances in your default compute zone:
+
+#+begin_src sh :session k-sh :results output replace
+  gcloud compute instances list --filter="tags:kubernetes-the-hard-way"
+  gcloud compute instances list --filter="tags.items=kubernetes-the-hard-way AND tags.items=controller" --format="csv(name)[no-heading]" > controller-nodes.txt
+  gcloud compute instances list --filter="tags.items=kubernetes-the-hard-way AND tags.items=worker" --format="csv(name)[no-heading]" >  worker-nodes.txt
+#+end_src
+
+#+RESULTS:
+#+begin_example
+NAME             ZONE        MACHINE_TYPE   PREEMPTIBLE  INTERNAL_IP  EXTERNAL_IP  STATUS
+gg-controller-0  us-west2-c  n1-standard-4               10.240.0.10               RUNNING
+gg-controller-1  us-west2-c  n1-standard-4               10.240.0.11               RUNNING
+gg-controller-2  us-west2-c  n1-standard-4               10.240.0.12               RUNNING
+gg-worker-0      us-west2-c  n1-standard-8               10.240.0.20               RUNNING
+gg-worker-1      us-west2-c  n1-standard-8               10.240.0.21               RUNNING
+gg-worker-2      us-west2-c  n1-standard-8               10.240.0.22               RUNNING
+gg-worker-3      us-west2-c  n1-standard-8               10.240.0.23               RUNNING
+gg-worker-4      us-west2-c  n1-standard-8               10.240.0.24               RUNNING
+gg-worker-5      us-west2-c  n1-standard-8               10.240.0.25               RUNNING
+#+end_example
+
+
+** Configuring SSH Access
+   :PROPERTIES:
+   :CUSTOM_ID: configuring-ssh-access
+   :END:
+
+SSH will be used to configure the controller and worker instances. When connecting to compute instances for the first time SSH keys will be generated for you and stored in the project or instance metadata as described in the [[https://cloud.google.com/compute/docs/instances/connecting-to-instance][connecting to instances]] documentation.
+
+Test SSH access to the =gg-controller-0= compute instances:
+
+#+begin_src sh :session k-sh :results none
+  gcloud compute ssh gg-controller-0
+#+end_src
+
+If this is your first time connecting to a compute instance SSH keys will be generated for you. Enter a passphrase at the prompt to continue:
+
+#+begin_example
+  WARNING: The public SSH key file for gcloud does not exist.
+  WARNING: The private SSH key file for gcloud does not exist.
+  WARNING: You do not have an SSH key for gcloud.
+  WARNING: SSH keygen will be executed to generate a key.
+  Generating public/private rsa key pair.
+  Enter passphrase (empty for no passphrase):
+  Enter same passphrase again:
+#+end_example
+
+At this point the generated SSH keys will be uploaded and stored in your project:
+
+#+begin_example
+  Your identification has been saved in /home/$USER/.ssh/google_compute_engine.
+  Your public key has been saved in /home/$USER/.ssh/google_compute_engine.pub.
+  The key fingerprint is:
+  SHA256:nz1i8jHmgQuGt+WscqP5SeIaSy5wyIJeL71MuV+QruE $USER@$HOSTNAME
+  The key's randomart image is:
+  +---[RSA 2048]----+
+  |                 |
+  |                 |
+  |                 |
+  |        .        |
+  |o.     oS        |
+  |=... .o .o o     |
+  |+.+ =+=.+.X o    |
+  |.+ ==O*B.B = .   |
+  | .+.=EB++ o      |
+  +----[SHA256]-----+
+  Updating project ssh metadata...-Updated [https://www.googleapis.com/compute/v1/projects/$PROJECT_ID].
+  Updating project ssh metadata...done.
+  Waiting for SSH key to propagate.
+#+end_example
+
+After the SSH keys have been updated you'll be logged into the =gg-controller-0= instance:
+
+#+begin_example
+  Welcome to Ubuntu 18.04.3 LTS (GNU/Linux 4.15.0-1042-gcp x86_64)
+  ...
+
+  Last login: Sun Sept 14 14:34:27 2019 from XX.XXX.XXX.XX
+#+end_example
+
+Type =exit= at the prompt to exit the =gg-controller-0= compute instance:
+
+#+begin_src sh :session k-sh :results none
+  $USER@gg-controller-0:~$ exit
+#+end_src
+
+#+begin_quote
+  output
+#+end_quote
+
+#+begin_example
+  logout
+  Connection to XX.XXX.XXX.XXX closed
+#+end_example
+
+Next: [[file:04-certificate-authority.md][Provisioning a CA and Generating TLS Certificates]]
