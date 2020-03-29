@@ -11,7 +11,8 @@
 #+select_tags: export
 #+exclude_tags: noexport
 #+creator: Emacs 27.0.60 (Org mode 9.3.1)
-#+setupfile: https://raw.githubusercontent.com/fniessen/org-html-themes/master/setup/theme-readtheorg.setup
+# #+setupfile: https://raw.githubusercontent.com/fniessen/org-html-themes/master/setup/theme-readtheorg.setup
+#+setupfile: ~/projects/emacs/org-html-themes/setup/theme-readtheorg.setup
 #+PROPERTY: header-args:sh :comments org :shebang #!/usr/bin/env bash :tangle no
 * Source for this tutorial
   [[https://medium.com/faun/configuring-ha-kubernetes-cluster-on-bare-metal-servers-with-kubeadm-1-2-1e79f0f7857b][Configuring HA Kubernetes cluster on bare metal servers with kubeadm]] (medium.com)
