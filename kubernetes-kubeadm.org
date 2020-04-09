@@ -67,21 +67,6 @@ Verify the Google Cloud SDK version is 262.0.0 or higher:
   gcloud version
 #+end_src
 
-#+RESULTS:
-#+begin_example
-Google Cloud SDK 278.0.0
-alpha 2020.01.24
-beta 2020.01.24
-bq 2.0.52
-core 2020.01.24
-gsutil 4.47
-kubectl 2020.01.24
-
-
-To take a quick anonymous survey, run:
-gcloud survey
-#+end_example
-
 *** Set a Default Compute Region and Zone
     :PROPERTIES:
     :CUSTOM_ID: set-a-default-compute-region-and-zone
@@ -190,10 +175,6 @@ Verify =cfssl= and =cfssljson= version 1.3.4 or higher is installed:
   cfssl version
 #+end_src
 
-#+RESULTS:
-: Version: 1.4.1
-: Runtime: go1.13.4
-
 #+begin_quote
   output
 #+end_quote
@@ -207,10 +188,6 @@ Verify =cfssl= and =cfssljson= version 1.3.4 or higher is installed:
 #+begin_src sh :session k-sh :results output replace
   cfssljson --version
 #+end_src
-
-#+RESULTS:
-: Version: 1.4.1
-: Runtime: go1.13.4
 
 #+begin_example
   Version: 1.3.4
@@ -258,9 +235,6 @@ Verify =kubectl= version 1.15.3 or higher is installed:
   kubectl version --client --short
 #+end_src
 
-#+RESULTS:
-: Client Version: v1.16.2
-
 #+begin_quote
   output
 #+end_quote
@@ -294,8 +268,6 @@ specify your own path, set =WORKPATH= prior to executing the following code
   pwd
 #+end_src
 
-#+RESULTS:
-
 * Provisioning Compute Resources
   :PROPERTIES:
   :CUSTOM_ID: provisioning-compute-resources
@@ -309,17 +281,6 @@ Kubernetes requires a set of machines to host the Kubernetes control plane and t
 #+begin_src sh :session k-sh :results output replace
 gcloud config list
 #+end_src
-
-#+RESULTS:
-: [compute]
-: region = us-west2
-: zone = us-west2-c
-: [core]
-: account = ggrubbs@mesosphere.io
-: disable_usage_reporting = True
-: project = konvoy-gcp-se
-: 
-: Your active configuration is: [default]
 
 
 ** Networking
@@ -340,18 +301,18 @@ The Kubernetes [[https://kubernetes.io/docs/concepts/cluster-administration/netw
 
 In this section a dedicated [[https://cloud.google.com/compute/docs/networks-and-firewalls#networks][Virtual Private Cloud]] (VPC) network will be setup to host the Kubernetes cluster.
 
-**** Create the =kubernetes-the-hard-way= custom VPC network:
-#+begin_src sh :session k-sh :results none :results none :tangle cluster-setup/bin/01-provision-gcp.sh :comments org
-  gcloud compute networks create kubernetes-the-hard-way --subnet-mode custom
+**** Create the =k8sgcp= custom VPC network:
+#+begin_src sh :session k-sh :results none :results none :tangle kubeadm-setup/01-provision-gcp.sh :comments org
+  gcloud compute networks create k8sgcp --subnet-mode custom
 #+end_src
 
 
 A [[https://cloud.google.com/compute/docs/vpc/#vpc_networks_and_subnets][subnet]] must be provisioned with an IP address range large enough to assign a private IP address to each node in the Kubernetes cluster.
 
-**** Create the =kubernetes= subnet in the =kubernetes-the-hard-way= VPC network:
-#+begin_src sh :session k-sh :results none :tangle cluster-setup/bin/01-provision-gcp.sh
+**** Create the =kubernetes= subnet in the =k8sgcp= VPC network:
+#+begin_src sh :session k-sh :results none :tangle kubeadm-setup/01-provision-gcp.sh
   gcloud compute networks subnets create kubernetes \
-    --network kubernetes-the-hard-way \
+    --network k8sgcp \
     --range 10.240.0.0/24
 #+end_src
 
@@ -359,12 +320,12 @@ A [[https://cloud.google.com/compute/docs/vpc/#vpc_networks_and_subnets][subnet]
   The =10.240.0.0/24= IP address range can host up to 254 compute instances.
 #+end_quote
 **** Create the Cloud NAT and Cloud Router for outbound internet access
-#+begin_src sh :session k-sh :results none :tangle cluster-setup/bin/01-provision-gcp.sh
-gcloud compute routers create kthw-router \
-    --network kubernetes-the-hard-way
+#+begin_src sh :session k-sh :results none :tangle kubeadm-setup/01-provision-gcp.sh
+gcloud compute routers create k8sgcp-router \
+    --network k8sgcp
 
-gcloud compute routers nats create kthw-nat \
-    --router=kthw-router \
+gcloud compute routers nats create k8sgcp-nat \
+    --router=k8sgcp-router \
     --auto-allocate-nat-external-ips \
     --nat-all-subnet-ip-ranges \
     --enable-logging
@@ -377,19 +338,19 @@ gcloud compute routers nats create kthw-nat \
 
 **** Create a firewall rule that allows internal communication across all protocols:
 
-#+begin_src sh :session k-sh :results none :tangle cluster-setup/bin/01-provision-gcp.sh
-  gcloud compute firewall-rules create kubernetes-the-hard-way-allow-internal \
+#+begin_src sh :session k-sh :results none :tangle kubeadm-setup/01-provision-gcp.sh
+  gcloud compute firewall-rules create k8sgcp-allow-internal \
     --allow tcp,udp,icmp \
-    --network kubernetes-the-hard-way \
+    --network k8sgcp \
     --source-ranges 10.240.0.0/24,10.200.0.0/16
 #+end_src
 
 **** Create a firewall rule that allows external SSH, ICMP, and HTTPS:
 
-#+begin_src sh :session k-sh :results none :tangle cluster-setup/bin/01-provision-gcp.sh
-  gcloud compute firewall-rules create kubernetes-the-hard-way-allow-external \
+#+begin_src sh :session k-sh :results none :tangle kubeadm-setup/01-provision-gcp.sh
+  gcloud compute firewall-rules create k8sgcp-allow-external \
     --allow tcp:22,tcp:6443,icmp \
-    --network kubernetes-the-hard-way \
+    --network k8sgcp \
     --source-ranges 0.0.0.0/0
 #+end_src
 
@@ -397,22 +358,14 @@ gcloud compute routers nats create kthw-nat \
   An [[https://cloud.google.com/compute/docs/load-balancing/network/][external load balancer]] will be used to expose the Kubernetes API Servers to remote clients.
 #+end_quote
 
-List the firewall rules in the =kubernetes-the-hard-way= VPC network:
+List the firewall rules in the =k8sgcp= VPC network:
 
 #+begin_src sh :session k-sh :results output replace 
-  gcloud compute firewall-rules list --filter="network:kubernetes-the-hard-way"
+  gcloud compute firewall-rules list --filter="network:k8sgcp"
 #+end_src
-
-#+RESULTS:
-: NAME                                    NETWORK                  DIRECTION  PRIORITY  ALLOW                 DENY  DISABLED
-: kubernetes-the-hard-way-allow-external  kubernetes-the-hard-way  INGRESS    1000      tcp:22,tcp:6443,icmp        False
-: kubernetes-the-hard-way-allow-internal  kubernetes-the-hard-way  INGRESS    1000      tcp,udp,icmp                False
-: 
-: To show all fields of the firewall, please show in JSON format: --format=json
-: To show all fields in table format, please see the examples in --help.
 NAME                                    NETWORK                  DIRECTION  PRIORITY  ALLOW                 DENY  DISABLED
-kubernetes-the-hard-way-allow-external  kubernetes-the-hard-way  INGRESS    1000      tcp:22,tcp:6443,icmp        False
-kubernetes-the-hard-way-allow-internal  kubernetes-the-hard-way  INGRESS    1000      tcp,udp,icmp                False
+k8sgcp-allow-external  k8sgcp  INGRESS    1000      tcp:22,tcp:6443,icmp        False
+k8sgcp-allow-internal  k8sgcp  INGRESS    1000      tcp,udp,icmp                False
 
 To show all fields of the firewall, please show in JSON format: --format=json
 To show all fields in table format, please see the examples in --help.
@@ -423,8 +376,8 @@ To show all fields in table format, please see the examples in --help.
 
 #+begin_example
   NAME                                    NETWORK                  DIRECTION  PRIORITY  ALLOW                 DENY
-  kubernetes-the-hard-way-allow-external  kubernetes-the-hard-way  INGRESS    1000      tcp:22,tcp:6443,icmp
-  kubernetes-the-hard-way-allow-internal  kubernetes-the-hard-way  INGRESS    1000      tcp,udp,icmp
+  k8sgcp-allow-external  k8sgcp  INGRESS    1000      tcp:22,tcp:6443,icmp
+  k8sgcp-allow-internal  k8sgcp  INGRESS    1000      tcp,udp,icmp
 #+end_example
 
 *** Kubernetes Public IP Address
@@ -434,20 +387,16 @@ To show all fields in table format, please see the examples in --help.
 
 **** Allocate a static IP address that will be attached to the external load balancer fronting the Kubernetes API Servers:
 
-#+begin_src sh :session k-sh :results none :tangle cluster-setup/bin/01-provision-gcp.sh
-  gcloud compute addresses create kubernetes-the-hard-way \
+#+begin_src sh :session k-sh :results none :tangle kubeadm-setup/01-provision-gcp.sh
+  gcloud compute addresses create k8sgcp \
     --region $(gcloud config get-value compute/region)
 #+end_src
 
-Verify the =kubernetes-the-hard-way= static IP address was created in your default compute region:
+Verify the =k8sgcp= static IP address was created in your default compute region:
 
 #+begin_src sh :session k-sh :results output replace
-  gcloud compute addresses list --filter="name=('kubernetes-the-hard-way')"
+  gcloud compute addresses list --filter="name=('k8sgcp')"
 #+end_src
-
-#+RESULTS:
-: NAME                     ADDRESS/RANGE  TYPE      PURPOSE  NETWORK  REGION    SUBNET  STATUS
-: kubernetes-the-hard-way  34.94.97.101   EXTERNAL                    us-west2          RESERVED
 
 #+begin_quote
   output
@@ -455,7 +404,7 @@ Verify the =kubernetes-the-hard-way= static IP address was created in your defau
 
 #+begin_example
   NAME                     REGION    ADDRESS        STATUS
-  kubernetes-the-hard-way  us-west1  XX.XXX.XXX.XX  RESERVED
+  k8sgcp  us-west1  XX.XXX.XXX.XX  RESERVED
 #+end_example
 
 ** Compute Instances
@@ -471,35 +420,30 @@ The compute instances in this lab will be provisioned using [[https://www.ubuntu
     :END:
 
 **** Create three compute instances which will host the Kubernetes control plane:
-#+begin_src sh :session k-sh :results none :tangle cluster-setup/bin/01-provision-gcp.sh
-CONTROL_INSTANCE_TYPE=n1-standard-4
-  for i in 0 1; do
-    gcloud compute instances create gg-controller-${i} \
-      --async \
-	  --no-address \
-      --boot-disk-size 200GB \
-      --can-ip-forward \
-      --image-family ubuntu-1804-lts \
-      --image-project ubuntu-os-cloud \
-      --machine-type ${CONTROL_INSTANCE_TYPE} \
-      --private-network-ip 10.240.0.1${i} \
-      --scopes compute-rw,storage-ro,service-management,service-control,logging-write,monitoring \
-      --subnet kubernetes \
-      --tags kubernetes-the-hard-way,controller \
-	  --labels owner=ggrubbs,expiration=48h
+#+begin_src sh :session k-sh :results none :tangle kubeadm-setup/01-provision-gcp.sh
+  CONTROL_INSTANCE_TYPE=n1-standard-2
+  for i in 0 1 2; do
+      echo $i
+      gcloud compute instances create gg-controller-${i} \
+             --async \
+             --no-address \
+             --boot-disk-size 200GB \
+             --can-ip-forward \
+             --image-family ubuntu-1804-lts \
+             --image-project ubuntu-os-cloud \
+             --machine-type ${CONTROL_INSTANCE_TYPE} \
+             --private-network-ip 10.240.0.1${i} \
+             --scopes compute-rw,storage-ro,service-management,service-control,logging-write,monitoring \
+             --subnet kubernetes \
+             --tags k8sgcp,controller \
+             --labels owner=ggrubbs,expiration=48h
   done
 #+end_src
 
-List the create controller instances
+List the newly created controller instances
 #+begin_src sh :session k-sh :results table replace
-gcloud compute instances list --filter="tags.items=kubernetes-the-hard-way AND tags.items=controller"
+gcloud compute instances list --filter="tags.items=k8sgcp AND tags.items=controller"
 #+end_src
-
-#+RESULTS:
-| NAME            | ZONE       | MACHINE_TYPE  | PREEMPTIBLE |   INTERNAL_IP | EXTERNAL_IP | STATUS |
-| gg-controller-0 | us-west2-c | n1-standard-4 | 10.240.0.10 |  34.94.56.188 | RUNNING     |        |
-| gg-controller-1 | us-west2-c | n1-standard-4 | 10.240.0.11 | 34.94.182.163 | RUNNING     |        |
-| gg-controller-2 | us-west2-c | n1-standard-4 | 10.240.0.12 |  35.235.77.77 | RUNNING     |        |
 
 *** Kubernetes Workers
     :PROPERTIES:
@@ -513,55 +457,32 @@ Each worker instance requires a pod subnet allocation from the Kubernetes cluste
 #+end_quote
 
 **** Create ${NUM_WORKERS} compute instances which will host the Kubernetes worker nodes:
-#+begin_src sh :session k-sh :results none :tangle cluster-setup/bin/01-provision-gcp.sh
-  WORKER_INSTANCE_TYPE=n1-standard-8
+#+begin_src sh :session k-sh :results none :tangle kubeadm-setup/01-provision-gcp.sh
+  WORKER_INSTANCE_TYPE=n1-standard-4
   NUM_WORKERS=3
-	for i in $(seq 0 $((${NUM_WORKERS} - 1))) ; do
-	# for i in 0 1 2; do
-	  gcloud compute instances create gg-worker-${i} \
-		--async \
-		--no-address \
-		--boot-disk-size 200GB \
-		--can-ip-forward \
-		--image-family ubuntu-1804-lts \
-		--image-project ubuntu-os-cloud \
-		--machine-type ${WORKER_INSTANCE_TYPE} \
-		--metadata pod-cidr=10.200.${i}.0/24 \
-		--private-network-ip 10.240.0.2${i} \
-		--scopes compute-rw,storage-ro,service-management,service-control,logging-write,monitoring \
-		--subnet kubernetes \
-		--tags kubernetes-the-hard-way,worker \
-		--labels owner=ggrubbs,expiration=48h
-	done
+  for i in $(seq 0 $((${NUM_WORKERS} - 1))) ; do
+      echo $i
+      gcloud compute instances create gg-worker-${i} \
+             --async \
+             --no-address \
+             --boot-disk-size 200GB \
+             --can-ip-forward \
+             --image-family ubuntu-1804-lts \
+             --image-project ubuntu-os-cloud \
+             --machine-type ${WORKER_INSTANCE_TYPE} \
+             --metadata pod-cidr=10.200.${i}.0/24 \
+             --private-network-ip 10.240.0.2${i} \
+             --scopes compute-rw,storage-ro,service-management,service-control,logging-write,monitoring \
+             --subnet kubernetes \
+             --tags k8sgcp,worker \
+             --labels owner=ggrubbs,expiration=48h
+  done
 #+end_src
-
-#+RESULTS:
-#+begin_example
-
-▶  ~ ❯ projects ❯ … ❯ docs ▶  gregoryg ▶ $ ▶ > > > > > > > > > > > > > > NOTE: The users will be charged for public IPs when VMs are created.
-Instance creation in progress for [gg-worker-0]: https://www.googleapis.com/compute/v1/projects/konvoy-gcp-se/zones/us-west2-c/operations/operation-1580347403479-59d514d9b2b14-47b5eb0d-04d928f3
-Use [gcloud compute operations describe URI] command to check the status of the operation(s).
-NOTE: The users will be charged for public IPs when VMs are created.
-Instance creation in progress for [gg-worker-1]: https://www.googleapis.com/compute/v1/projects/konvoy-gcp-se/zones/us-west2-c/operations/operation-1580347406920-59d514dcfac59-892dfeed-90ace76a
-Use [gcloud compute operations describe URI] command to check the status of the operation(s).
-NOTE: The users will be charged for public IPs when VMs are created.
-Instance creation in progress for [gg-worker-2]: https://www.googleapis.com/compute/v1/projects/konvoy-gcp-se/zones/us-west2-c/operations/operation-1580347410170-59d514e014220-3c02d392-56469a79
-Use [gcloud compute operations describe URI] command to check the status of the operation(s).
-#+end_example
 
 List the created worker instances
 #+begin_src sh :session k-sh :results table replace
-gcloud compute instances list --filter="tags.items=kubernetes-the-hard-way AND tags.items=worker"
+gcloud compute instances list --filter="tags.items=k8sgcp AND tags.items=worker"
 #+end_src
-
-#+RESULTS:
-| NAME        | ZONE       | MACHINE_TYPE  | PREEMPTIBLE |   INTERNAL_IP | EXTERNAL_IP | STATUS |
-| gg-worker-0 | us-west2-c | n1-standard-8 | 10.240.0.20 |  35.236.1.139 | RUNNING     |        |
-| gg-worker-1 | us-west2-c | n1-standard-8 | 10.240.0.21 | 35.236.93.211 | RUNNING     |        |
-| gg-worker-2 | us-west2-c | n1-standard-8 | 10.240.0.22 | 34.94.175.154 | RUNNING     |        |
-| gg-worker-3 | us-west2-c | n1-standard-8 | 10.240.0.23 |  34.94.206.98 | RUNNING     |        |
-| gg-worker-4 | us-west2-c | n1-standard-8 | 10.240.0.24 | 35.236.113.11 | RUNNING     |        |
-| gg-worker-5 | us-west2-c | n1-standard-8 | 10.240.0.25 |  34.94.241.86 | RUNNING     |        |
 
 *** ETCD Cluster Instances
     :PROPERTIES:
@@ -574,56 +495,10 @@ Each worker instance requires a pod subnet allocation from the Kubernetes cluste
   The Kubernetes cluster CIDR range is defined by the Controller Manager's =--cluster-cidr= flag. In this tutorial the cluster CIDR range will be set to =10.200.0.0/16=, which supports 254 subnets.
 #+end_quote
 
-**** Create ${NUM_ETCD} compute instances which will host the Kubernetes etcd nodes:
-#+begin_src sh :session k-sh :results none :tangle cluster-setup/bin/01-provision-gcp.sh
-  ETCD_INSTANCE_TYPE=n1-standard-8
-  NUM_ETCD=3
-	for i in $(seq 0 $((${NUM_ETCD} - 1))) ; do
-	# for i in 0 1 2; do
-	  gcloud compute instances create gg-etcd-${i} \
-		--async \
-		--no-address \
-		--boot-disk-size 200GB \
-		--can-ip-forward \
-		--image-family ubuntu-1804-lts \
-		--image-project ubuntu-os-cloud \
-		--machine-type ${ETCD_INSTANCE_TYPE} \
-		--metadata pod-cidr=10.200.${i}.0/24 \
-		--private-network-ip 10.240.0.3${i} \
-		--scopes compute-rw,storage-ro,service-management,service-control,logging-write,monitoring \
-		--subnet kubernetes \
-		--tags kubernetes-the-hard-way,etcd \
-		--labels owner=ggrubbs,expiration=48h
-	done
-#+end_src
-
-#+RESULTS:
-#+begin_example
-
-▶  ~ ❯ projects ❯ … ❯ docs ▶  gregoryg ▶ $ ▶ > > > > > > > > > > > > > > NOTE: The users will be charged for public IPs when VMs are created.
-Instance creation in progress for [gg-worker-0]: https://www.googleapis.com/compute/v1/projects/konvoy-gcp-se/zones/us-west2-c/operations/operation-1580347403479-59d514d9b2b14-47b5eb0d-04d928f3
-Use [gcloud compute operations describe URI] command to check the status of the operation(s).
-NOTE: The users will be charged for public IPs when VMs are created.
-Instance creation in progress for [gg-worker-1]: https://www.googleapis.com/compute/v1/projects/konvoy-gcp-se/zones/us-west2-c/operations/operation-1580347406920-59d514dcfac59-892dfeed-90ace76a
-Use [gcloud compute operations describe URI] command to check the status of the operation(s).
-NOTE: The users will be charged for public IPs when VMs are created.
-Instance creation in progress for [gg-worker-2]: https://www.googleapis.com/compute/v1/projects/konvoy-gcp-se/zones/us-west2-c/operations/operation-1580347410170-59d514e014220-3c02d392-56469a79
-Use [gcloud compute operations describe URI] command to check the status of the operation(s).
-#+end_example
-
 List the created worker instances
 #+begin_src sh :session k-sh :results table replace
-gcloud compute instances list --filter="tags.items=kubernetes-the-hard-way AND tags.items=worker"
+gcloud compute instances list --filter="tags.items=k8sgcp AND tags.items=worker"
 #+end_src
-
-#+RESULTS:
-| NAME        | ZONE       | MACHINE_TYPE  | PREEMPTIBLE |   INTERNAL_IP | EXTERNAL_IP | STATUS |
-| gg-worker-0 | us-west2-c | n1-standard-8 | 10.240.0.20 |  35.236.1.139 | RUNNING     |        |
-| gg-worker-1 | us-west2-c | n1-standard-8 | 10.240.0.21 | 35.236.93.211 | RUNNING     |        |
-| gg-worker-2 | us-west2-c | n1-standard-8 | 10.240.0.22 | 34.94.175.154 | RUNNING     |        |
-| gg-worker-3 | us-west2-c | n1-standard-8 | 10.240.0.23 |  34.94.206.98 | RUNNING     |        |
-| gg-worker-4 | us-west2-c | n1-standard-8 | 10.240.0.24 | 35.236.113.11 | RUNNING     |        |
-| gg-worker-5 | us-west2-c | n1-standard-8 | 10.240.0.25 |  34.94.241.86 | RUNNING     |        |
 *** Verification
     :PROPERTIES:
     :CUSTOM_ID: verification
@@ -632,24 +507,10 @@ gcloud compute instances list --filter="tags.items=kubernetes-the-hard-way AND t
 List the compute instances in your default compute zone:
 
 #+begin_src sh :session k-sh :results output replace
-  gcloud compute instances list --filter="tags:kubernetes-the-hard-way"
-  gcloud compute instances list --filter="tags.items=kubernetes-the-hard-way AND tags.items=controller" --format="csv(name)[no-heading]" > controller-nodes.txt
-  gcloud compute instances list --filter="tags.items=kubernetes-the-hard-way AND tags.items=worker" --format="csv(name)[no-heading]" >  worker-nodes.txt
+  gcloud compute instances list --filter="tags:k8sgcp"
+  gcloud compute instances list --filter="tags.items=k8sgcp AND tags.items=controller" --format="csv(name)[no-heading]" > controller-nodes.txt
+  gcloud compute instances list --filter="tags.items=k8sgcp AND tags.items=worker" --format="csv(name)[no-heading]" >  worker-nodes.txt
 #+end_src
-
-#+RESULTS:
-#+begin_example
-NAME             ZONE        MACHINE_TYPE   PREEMPTIBLE  INTERNAL_IP  EXTERNAL_IP  STATUS
-gg-controller-0  us-west2-c  n1-standard-4               10.240.0.10               RUNNING
-gg-controller-1  us-west2-c  n1-standard-4               10.240.0.11               RUNNING
-gg-controller-2  us-west2-c  n1-standard-4               10.240.0.12               RUNNING
-gg-worker-0      us-west2-c  n1-standard-8               10.240.0.20               RUNNING
-gg-worker-1      us-west2-c  n1-standard-8               10.240.0.21               RUNNING
-gg-worker-2      us-west2-c  n1-standard-8               10.240.0.22               RUNNING
-gg-worker-3      us-west2-c  n1-standard-8               10.240.0.23               RUNNING
-gg-worker-4      us-west2-c  n1-standard-8               10.240.0.24               RUNNING
-gg-worker-5      us-west2-c  n1-standard-8               10.240.0.25               RUNNING
-#+end_example
 
 
 ** Configuring SSH Access
@@ -726,3 +587,69 @@ Type =exit= at the prompt to exit the =gg-controller-0= compute instance:
 #+end_example
 
 Next: [[file:04-certificate-authority.md][Provisioning a CA and Generating TLS Certificates]]
+
+* Cleaning Up
+   :PROPERTIES:
+   :CUSTOM_ID: cleaning-up
+   :END:
+
+ In this lab you will delete the compute resources created during this tutorial.
+
+*** Compute Instances
+    :PROPERTIES:
+    :CUSTOM_ID: compute-instances
+    :END:
+
+**** Delete the controller and worker compute instances:
+
+ #+begin_src sh :session k-sh :results none :tangle kubeadm-setup/99-cleanup-gcp.sh
+   gcloud -q compute instances delete \
+          $(gcloud compute instances list --filter="tags.items=k8sgcp" --format="csv(name)[no-heading]") \
+          --zone $(gcloud config get-value compute/zone)
+ #+end_src
+
+*** Networking
+    :PROPERTIES:
+    :CUSTOM_ID: networking
+    :END:
+
+**** Delete Cloud NAT and Cloud Router
+ #+begin_src sh :session k-sh :results none :tangle kubeadm-setup/99-cleanup-gcp.sh
+   gcloud -q compute routers nats delete k8sgcp-nat --router k8sgcp-router
+   gcloud -q compute routers delete k8sgcp-router
+ #+end_src
+**** Delete the external load balancer network resources:
+
+ #+begin_src sh :session k-sh :results none :tangle kubeadm-setup/99-cleanup-gcp.sh
+   gcloud -q compute forwarding-rules delete kubernetes-forwarding-rule \
+		  --region $(gcloud config get-value compute/region)
+
+   gcloud -q compute target-pools delete kubernetes-target-pool
+
+   gcloud -q compute http-health-checks delete kubernetes
+
+   gcloud -q compute addresses delete k8sgcp
+ #+end_src
+
+**** Delete the =k8sgcp= firewall rules:
+
+ #+begin_src sh :session k-sh :results none :tangle kubeadm-setup/99-cleanup-gcp.sh
+   gcloud -q compute firewall-rules delete \
+     k8sgcp-allow-nginx-service \
+     k8sgcp-allow-internal \
+     k8sgcp-allow-external \
+     k8sgcp-allow-health-check
+ #+end_src
+
+**** Delete the =k8sgcp= network VPC:
+
+ #+begin_src sh :session k-sh :results none :tangle kubeadm-setup/99-cleanup-gcp.sh
+     gcloud -q compute routes delete \
+       kubernetes-route-10-200-0-0-24 \
+       kubernetes-route-10-200-1-0-24 \
+       kubernetes-route-10-200-2-0-24
+
+     gcloud -q compute networks subnets delete kubernetes
+
+     gcloud -q compute networks delete k8sgcp
+ #+end_src
